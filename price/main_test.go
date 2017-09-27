@@ -3,8 +3,8 @@ package price_test
 import (
 	"testing"
 
-	"github.com/stellar/go/price"
-	"github.com/stellar/go/xdr"
+	"github.com/Kregopaulgue/go/price"
+	"github.com/Kregopaulgue/go/xdr"
 )
 
 var Tests = []struct {

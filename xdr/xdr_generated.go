@@ -826,16 +826,18 @@ func (e ThresholdIndexes) String() string {
 //        ACCOUNT = 0,
 //        TRUSTLINE = 1,
 //        OFFER = 2,
-//        DATA = 3
+//        DATA = 3,
+//    	SIGNERS_ACCESS = 4
 //    };
 //
 type LedgerEntryType int32
 
 const (
-	LedgerEntryTypeAccount   LedgerEntryType = 0
-	LedgerEntryTypeTrustline LedgerEntryType = 1
-	LedgerEntryTypeOffer     LedgerEntryType = 2
-	LedgerEntryTypeData      LedgerEntryType = 3
+	LedgerEntryTypeAccount       LedgerEntryType = 0
+	LedgerEntryTypeTrustline     LedgerEntryType = 1
+	LedgerEntryTypeOffer         LedgerEntryType = 2
+	LedgerEntryTypeData          LedgerEntryType = 3
+	LedgerEntryTypeSignersAccess LedgerEntryType = 4
 )
 
 var ledgerEntryTypeMap = map[int32]string{
@@ -843,6 +845,7 @@ var ledgerEntryTypeMap = map[int32]string{
 	1: "LedgerEntryTypeTrustline",
 	2: "LedgerEntryTypeOffer",
 	3: "LedgerEntryTypeData",
+	4: "LedgerEntryTypeSignersAccess",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -1262,6 +1265,66 @@ type DataEntry struct {
 	Ext       DataEntryExt
 }
 
+// SignersAccessEntryExt is an XDR NestedUnion defines as:
+//
+//   union switch (int v)
+//        {
+//        case 0:
+//            void;
+//        }
+//
+type SignersAccessEntryExt struct {
+	V int32
+}
+
+// SwitchFieldName returns the field name in which this union's
+// discriminant is stored
+func (u SignersAccessEntryExt) SwitchFieldName() string {
+	return "V"
+}
+
+// ArmForSwitch returns which field name should be used for storing
+// the value for an instance of SignersAccessEntryExt
+func (u SignersAccessEntryExt) ArmForSwitch(sw int32) (string, bool) {
+	switch int32(sw) {
+	case 0:
+		return "", true
+	}
+	return "-", false
+}
+
+// NewSignersAccessEntryExt creates a new  SignersAccessEntryExt.
+func NewSignersAccessEntryExt(v int32, value interface{}) (result SignersAccessEntryExt, err error) {
+	result.V = v
+	switch int32(v) {
+	case 0:
+		// void
+	}
+	return
+}
+
+// SignersAccessEntry is an XDR Struct defines as:
+//
+//   struct SignersAccessEntry
+//    {
+//        AccountID accessGiverID; // source account id that gives access
+//        AccountID accessTakerID; // friend account id that takes access
+//
+//        // reserved for future use
+//        union switch (int v)
+//        {
+//        case 0:
+//            void;
+//        }
+//        ext;
+//    };
+//
+type SignersAccessEntry struct {
+	AccessGiverId AccountId
+	AccessTakerId AccountId
+	Ext           SignersAccessEntryExt
+}
+
 // LedgerEntryData is an XDR NestedUnion defines as:
 //
 //   union switch (LedgerEntryType type)
@@ -1577,7 +1640,9 @@ type DecoratedSignature struct {
 //        ALLOW_TRUST = 7,
 //        ACCOUNT_MERGE = 8,
 //        INFLATION = 9,
-//        MANAGE_DATA = 10
+//        MANAGE_DATA = 10,
+//        GIVE_ACCESS = 11,
+//        SET_SIGNERS = 12
 //    };
 //
 type OperationType int32
@@ -1594,6 +1659,8 @@ const (
 	OperationTypeAccountMerge       OperationType = 8
 	OperationTypeInflation          OperationType = 9
 	OperationTypeManageData         OperationType = 10
+	OperationTypeGiveAccess         OperationType = 11
+	OperationTypeSetSigners         OperationType = 12
 )
 
 var operationTypeMap = map[int32]string{
@@ -1608,6 +1675,8 @@ var operationTypeMap = map[int32]string{
 	8:  "OperationTypeAccountMerge",
 	9:  "OperationTypeInflation",
 	10: "OperationTypeManageData",
+	11: "OperationTypeGiveAccess",
+	12: "OperationTypeSetSigners",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -1745,6 +1814,30 @@ type SetOptionsOp struct {
 	MedThreshold  *Uint32
 	HighThreshold *Uint32
 	HomeDomain    *String32
+	Signer        *Signer
+}
+
+// GiveSignersAccessOp is an XDR Struct defines as:
+//
+//   struct GiveSignersAccessOp
+//    {
+//        AccountID friendID; //friend account id
+//    };
+//
+type GiveSignersAccessOp struct {
+	FriendId AccountId
+}
+
+// SetSignersOp is an XDR Struct defines as:
+//
+//   struct SetSignersOp
+//    {
+//        AccountID* accessGiverID; //id of the one who gives signers access
+//        Signer* signer;           //signer to deal with signers
+//    };
+//
+type SetSignersOp struct {
+	AccessGiverId *AccountId
 	Signer        *Signer
 }
 
@@ -1939,6 +2032,10 @@ type ManageDataOp struct {
 //            void;
 //        case MANAGE_DATA:
 //            ManageDataOp manageDataOp;
+//        case GIVE_ACCESS:
+//                GiveSignersAccessOp giveSignersAccessOp;
+//        case SET_SIGNERS:
+//            SetSignersOp setSignersOp;
 //        }
 //
 type OperationBody struct {
@@ -1953,6 +2050,8 @@ type OperationBody struct {
 	AllowTrustOp         *AllowTrustOp
 	Destination          *AccountId
 	ManageDataOp         *ManageDataOp
+	GiveSignersAccessOp  *GiveSignersAccessOp
+	SetSignersOp         *SetSignersOp
 }
 
 // SwitchFieldName returns the field name in which this union's
@@ -1987,6 +2086,10 @@ func (u OperationBody) ArmForSwitch(sw int32) (string, bool) {
 		return "", true
 	case OperationTypeManageData:
 		return "ManageDataOp", true
+	case OperationTypeGiveAccess:
+		return "GiveSignersAccessOp", true
+	case OperationTypeSetSigners:
+		return "SetSignersOp", true
 	}
 	return "-", false
 }
@@ -2067,6 +2170,20 @@ func NewOperationBody(aType OperationType, value interface{}) (result OperationB
 			return
 		}
 		result.ManageDataOp = &tv
+	case OperationTypeGiveAccess:
+		tv, ok := value.(GiveSignersAccessOp)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be GiveSignersAccessOp")
+			return
+		}
+		result.GiveSignersAccessOp = &tv
+	case OperationTypeSetSigners:
+		tv, ok := value.(SetSignersOp)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be SetSignersOp")
+			return
+		}
+		result.SetSignersOp = &tv
 	}
 	return
 }
@@ -2321,6 +2438,56 @@ func (u OperationBody) GetManageDataOp() (result ManageDataOp, ok bool) {
 	return
 }
 
+// MustGiveSignersAccessOp retrieves the GiveSignersAccessOp value from the union,
+// panicing if the value is not set.
+func (u OperationBody) MustGiveSignersAccessOp() GiveSignersAccessOp {
+	val, ok := u.GetGiveSignersAccessOp()
+
+	if !ok {
+		panic("arm GiveSignersAccessOp is not set")
+	}
+
+	return val
+}
+
+// GetGiveSignersAccessOp retrieves the GiveSignersAccessOp value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u OperationBody) GetGiveSignersAccessOp() (result GiveSignersAccessOp, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "GiveSignersAccessOp" {
+		result = *u.GiveSignersAccessOp
+		ok = true
+	}
+
+	return
+}
+
+// MustSetSignersOp retrieves the SetSignersOp value from the union,
+// panicing if the value is not set.
+func (u OperationBody) MustSetSignersOp() SetSignersOp {
+	val, ok := u.GetSetSignersOp()
+
+	if !ok {
+		panic("arm SetSignersOp is not set")
+	}
+
+	return val
+}
+
+// GetSetSignersOp retrieves the SetSignersOp value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u OperationBody) GetSetSignersOp() (result SetSignersOp, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "SetSignersOp" {
+		result = *u.SetSignersOp
+		ok = true
+	}
+
+	return
+}
+
 // Operation is an XDR Struct defines as:
 //
 //   struct Operation
@@ -2354,6 +2521,10 @@ func (u OperationBody) GetManageDataOp() (result ManageDataOp, ok bool) {
 //            void;
 //        case MANAGE_DATA:
 //            ManageDataOp manageDataOp;
+//        case GIVE_ACCESS:
+//                GiveSignersAccessOp giveSignersAccessOp;
+//        case SET_SIGNERS:
+//            SetSignersOp setSignersOp;
 //        }
 //        body;
 //    };
@@ -3605,6 +3776,182 @@ func NewSetOptionsResult(code SetOptionsResultCode, value interface{}) (result S
 	return
 }
 
+// GiveSignersAccessResultCode is an XDR Enum defines as:
+//
+//   enum GiveSignersAccessResultCode
+//    {
+//        GIVE_SIGNERS_ACCESS_SUCCESS = 0,
+//        GIVE_SIGNERS_ACCESS_LOW_RESERVE = -1,
+//    	GIVE_SIGNERS_ACCESS_FRIEND_IS_SOURCE = -2,
+//        GIVE_SIGNERS_ACCESS_FRIEND_DOESNT_EXIST = -3,
+//        GIVE_SIGNERS_ACCESS_ACCESS_SRC_NOT_AUTHORISED = -4
+//    };
+//
+type GiveSignersAccessResultCode int32
+
+const (
+	GiveSignersAccessResultCodeGiveSignersAccessSuccess                GiveSignersAccessResultCode = 0
+	GiveSignersAccessResultCodeGiveSignersAccessLowReserve             GiveSignersAccessResultCode = -1
+	GiveSignersAccessResultCodeGiveSignersAccessFriendIsSource         GiveSignersAccessResultCode = -2
+	GiveSignersAccessResultCodeGiveSignersAccessFriendDoesntExist      GiveSignersAccessResultCode = -3
+	GiveSignersAccessResultCodeGiveSignersAccessAccessSrcNotAuthorised GiveSignersAccessResultCode = -4
+)
+
+var giveSignersAccessResultCodeMap = map[int32]string{
+	0:  "GiveSignersAccessResultCodeGiveSignersAccessSuccess",
+	-1: "GiveSignersAccessResultCodeGiveSignersAccessLowReserve",
+	-2: "GiveSignersAccessResultCodeGiveSignersAccessFriendIsSource",
+	-3: "GiveSignersAccessResultCodeGiveSignersAccessFriendDoesntExist",
+	-4: "GiveSignersAccessResultCodeGiveSignersAccessAccessSrcNotAuthorised",
+}
+
+// ValidEnum validates a proposed value for this enum.  Implements
+// the Enum interface for GiveSignersAccessResultCode
+func (e GiveSignersAccessResultCode) ValidEnum(v int32) bool {
+	_, ok := giveSignersAccessResultCodeMap[v]
+	return ok
+}
+
+// String returns the name of `e`
+func (e GiveSignersAccessResultCode) String() string {
+	name, _ := giveSignersAccessResultCodeMap[int32(e)]
+	return name
+}
+
+// GiveSignersAccessResult is an XDR Union defines as:
+//
+//   union GiveSignersAccessResult switch (GiveSignersAccessResultCode code)
+//    {
+//    case GIVE_SIGNERS_ACCESS_SUCCESS:
+//        void;
+//    default:
+//        void;
+//    };
+//
+type GiveSignersAccessResult struct {
+	Code GiveSignersAccessResultCode
+}
+
+// SwitchFieldName returns the field name in which this union's
+// discriminant is stored
+func (u GiveSignersAccessResult) SwitchFieldName() string {
+	return "Code"
+}
+
+// ArmForSwitch returns which field name should be used for storing
+// the value for an instance of GiveSignersAccessResult
+func (u GiveSignersAccessResult) ArmForSwitch(sw int32) (string, bool) {
+	switch GiveSignersAccessResultCode(sw) {
+	case GiveSignersAccessResultCodeGiveSignersAccessSuccess:
+		return "", true
+	default:
+		return "", true
+	}
+}
+
+// NewGiveSignersAccessResult creates a new  GiveSignersAccessResult.
+func NewGiveSignersAccessResult(code GiveSignersAccessResultCode, value interface{}) (result GiveSignersAccessResult, err error) {
+	result.Code = code
+	switch GiveSignersAccessResultCode(code) {
+	case GiveSignersAccessResultCodeGiveSignersAccessSuccess:
+		// void
+	default:
+		// void
+	}
+	return
+}
+
+// SetSignersResultCode is an XDR Enum defines as:
+//
+//   enum SetSignersResultCode
+//    {
+//        SET_SIGNERS_SUCCESS = 0,
+//        SET_SIGNERS_LOW_RESERVE = -1,
+//        SET_SIGNERS_INVALID_ACCESS = -2,
+//        SET_SIGNERS_FRIEND_IS_SOURCE = -3,
+//        SET_SIGNERS_ACCESS_GIVER_DOESNT_EXIST = -4,
+//        SET_SIGNERS_ACCESS_ENTRY_DOESNT_EXIST = -5,
+//        SET_SIGNERS_BAD_SIGNER = -6
+//    };
+//
+type SetSignersResultCode int32
+
+const (
+	SetSignersResultCodeSetSignersSuccess                SetSignersResultCode = 0
+	SetSignersResultCodeSetSignersLowReserve             SetSignersResultCode = -1
+	SetSignersResultCodeSetSignersInvalidAccess          SetSignersResultCode = -2
+	SetSignersResultCodeSetSignersFriendIsSource         SetSignersResultCode = -3
+	SetSignersResultCodeSetSignersAccessGiverDoesntExist SetSignersResultCode = -4
+	SetSignersResultCodeSetSignersAccessEntryDoesntExist SetSignersResultCode = -5
+	SetSignersResultCodeSetSignersBadSigner              SetSignersResultCode = -6
+)
+
+var setSignersResultCodeMap = map[int32]string{
+	0:  "SetSignersResultCodeSetSignersSuccess",
+	-1: "SetSignersResultCodeSetSignersLowReserve",
+	-2: "SetSignersResultCodeSetSignersInvalidAccess",
+	-3: "SetSignersResultCodeSetSignersFriendIsSource",
+	-4: "SetSignersResultCodeSetSignersAccessGiverDoesntExist",
+	-5: "SetSignersResultCodeSetSignersAccessEntryDoesntExist",
+	-6: "SetSignersResultCodeSetSignersBadSigner",
+}
+
+// ValidEnum validates a proposed value for this enum.  Implements
+// the Enum interface for SetSignersResultCode
+func (e SetSignersResultCode) ValidEnum(v int32) bool {
+	_, ok := setSignersResultCodeMap[v]
+	return ok
+}
+
+// String returns the name of `e`
+func (e SetSignersResultCode) String() string {
+	name, _ := setSignersResultCodeMap[int32(e)]
+	return name
+}
+
+// SetSignersResult is an XDR Union defines as:
+//
+//   union SetSignersResult switch (SetSignersResultCode code)
+//    {
+//    case SET_SIGNERS_SUCCESS:
+//        void;
+//    default:
+//        void;
+//    };
+//
+type SetSignersResult struct {
+	Code SetSignersResultCode
+}
+
+// SwitchFieldName returns the field name in which this union's
+// discriminant is stored
+func (u SetSignersResult) SwitchFieldName() string {
+	return "Code"
+}
+
+// ArmForSwitch returns which field name should be used for storing
+// the value for an instance of SetSignersResult
+func (u SetSignersResult) ArmForSwitch(sw int32) (string, bool) {
+	switch SetSignersResultCode(sw) {
+	case SetSignersResultCodeSetSignersSuccess:
+		return "", true
+	default:
+		return "", true
+	}
+}
+
+// NewSetSignersResult creates a new  SetSignersResult.
+func NewSetSignersResult(code SetSignersResultCode, value interface{}) (result SetSignersResult, err error) {
+	result.Code = code
+	switch SetSignersResultCode(code) {
+	case SetSignersResultCodeSetSignersSuccess:
+		// void
+	default:
+		// void
+	}
+	return
+}
+
 // ChangeTrustResultCode is an XDR Enum defines as:
 //
 //   enum ChangeTrustResultCode
@@ -4177,6 +4524,10 @@ func (e OperationResultCode) String() string {
 //            InflationResult inflationResult;
 //        case MANAGE_DATA:
 //            ManageDataResult manageDataResult;
+//        case GIVE_ACCESS:
+//            GiveSignersAccessResult giveSignersAccessResult;
+//        case SET_SIGNERS:
+//            SetSignersResult setSignersResult;
 //        }
 //
 type OperationResultTr struct {
@@ -4192,6 +4543,8 @@ type OperationResultTr struct {
 	AccountMergeResult       *AccountMergeResult
 	InflationResult          *InflationResult
 	ManageDataResult         *ManageDataResult
+	GiveSignersAccessResult  *GiveSignersAccessResult
+	SetSignersResult         *SetSignersResult
 }
 
 // SwitchFieldName returns the field name in which this union's
@@ -4226,6 +4579,10 @@ func (u OperationResultTr) ArmForSwitch(sw int32) (string, bool) {
 		return "InflationResult", true
 	case OperationTypeManageData:
 		return "ManageDataResult", true
+	case OperationTypeGiveAccess:
+		return "GiveSignersAccessResult", true
+	case OperationTypeSetSigners:
+		return "SetSignersResult", true
 	}
 	return "-", false
 }
@@ -4311,6 +4668,20 @@ func NewOperationResultTr(aType OperationType, value interface{}) (result Operat
 			return
 		}
 		result.ManageDataResult = &tv
+	case OperationTypeGiveAccess:
+		tv, ok := value.(GiveSignersAccessResult)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be GiveSignersAccessResult")
+			return
+		}
+		result.GiveSignersAccessResult = &tv
+	case OperationTypeSetSigners:
+		tv, ok := value.(SetSignersResult)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be SetSignersResult")
+			return
+		}
+		result.SetSignersResult = &tv
 	}
 	return
 }
@@ -4590,6 +4961,56 @@ func (u OperationResultTr) GetManageDataResult() (result ManageDataResult, ok bo
 	return
 }
 
+// MustGiveSignersAccessResult retrieves the GiveSignersAccessResult value from the union,
+// panicing if the value is not set.
+func (u OperationResultTr) MustGiveSignersAccessResult() GiveSignersAccessResult {
+	val, ok := u.GetGiveSignersAccessResult()
+
+	if !ok {
+		panic("arm GiveSignersAccessResult is not set")
+	}
+
+	return val
+}
+
+// GetGiveSignersAccessResult retrieves the GiveSignersAccessResult value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u OperationResultTr) GetGiveSignersAccessResult() (result GiveSignersAccessResult, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "GiveSignersAccessResult" {
+		result = *u.GiveSignersAccessResult
+		ok = true
+	}
+
+	return
+}
+
+// MustSetSignersResult retrieves the SetSignersResult value from the union,
+// panicing if the value is not set.
+func (u OperationResultTr) MustSetSignersResult() SetSignersResult {
+	val, ok := u.GetSetSignersResult()
+
+	if !ok {
+		panic("arm SetSignersResult is not set")
+	}
+
+	return val
+}
+
+// GetSetSignersResult retrieves the SetSignersResult value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u OperationResultTr) GetSetSignersResult() (result SetSignersResult, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "SetSignersResult" {
+		result = *u.SetSignersResult
+		ok = true
+	}
+
+	return
+}
+
 // OperationResult is an XDR Union defines as:
 //
 //   union OperationResult switch (OperationResultCode code)
@@ -4619,6 +5040,10 @@ func (u OperationResultTr) GetManageDataResult() (result ManageDataResult, ok bo
 //            InflationResult inflationResult;
 //        case MANAGE_DATA:
 //            ManageDataResult manageDataResult;
+//        case GIVE_ACCESS:
+//            GiveSignersAccessResult giveSignersAccessResult;
+//        case SET_SIGNERS:
+//            SetSignersResult setSignersResult;
 //        }
 //        tr;
 //    default:
@@ -5312,6 +5737,19 @@ type LedgerKeyData struct {
 	DataName  String64
 }
 
+// LedgerKeySignersAccess is an XDR NestedStruct defines as:
+//
+//   struct
+//        {
+//            AccountID accessGiverID;
+//            AccountID accessTakerID;
+//        }
+//
+type LedgerKeySignersAccess struct {
+	AccessGiverId AccountId
+	AccessTakerId AccountId
+}
+
 // LedgerKey is an XDR Union defines as:
 //
 //   union LedgerKey switch (LedgerEntryType type)
@@ -5342,14 +5780,22 @@ type LedgerKeyData struct {
 //            AccountID accountID;
 //            string64 dataName;
 //        } data;
+//
+//    case SIGNERS_ACCESS:
+//        struct
+//        {
+//            AccountID accessGiverID;
+//            AccountID accessTakerID;
+//        } signersAccess;
 //    };
 //
 type LedgerKey struct {
-	Type      LedgerEntryType
-	Account   *LedgerKeyAccount
-	TrustLine *LedgerKeyTrustLine
-	Offer     *LedgerKeyOffer
-	Data      *LedgerKeyData
+	Type          LedgerEntryType
+	Account       *LedgerKeyAccount
+	TrustLine     *LedgerKeyTrustLine
+	Offer         *LedgerKeyOffer
+	Data          *LedgerKeyData
+	SignersAccess *LedgerKeySignersAccess
 }
 
 // SwitchFieldName returns the field name in which this union's
@@ -5370,6 +5816,8 @@ func (u LedgerKey) ArmForSwitch(sw int32) (string, bool) {
 		return "Offer", true
 	case LedgerEntryTypeData:
 		return "Data", true
+	case LedgerEntryTypeSignersAccess:
+		return "SignersAccess", true
 	}
 	return "-", false
 }
@@ -5406,6 +5854,13 @@ func NewLedgerKey(aType LedgerEntryType, value interface{}) (result LedgerKey, e
 			return
 		}
 		result.Data = &tv
+	case LedgerEntryTypeSignersAccess:
+		tv, ok := value.(LedgerKeySignersAccess)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be LedgerKeySignersAccess")
+			return
+		}
+		result.SignersAccess = &tv
 	}
 	return
 }
@@ -5504,6 +5959,31 @@ func (u LedgerKey) GetData() (result LedgerKeyData, ok bool) {
 
 	if armName == "Data" {
 		result = *u.Data
+		ok = true
+	}
+
+	return
+}
+
+// MustSignersAccess retrieves the SignersAccess value from the union,
+// panicing if the value is not set.
+func (u LedgerKey) MustSignersAccess() LedgerKeySignersAccess {
+	val, ok := u.GetSignersAccess()
+
+	if !ok {
+		panic("arm SignersAccess is not set")
+	}
+
+	return val
+}
+
+// GetSignersAccess retrieves the SignersAccess value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u LedgerKey) GetSignersAccess() (result LedgerKeySignersAccess, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "SignersAccess" {
+		result = *u.SignersAccess
 		ok = true
 	}
 
