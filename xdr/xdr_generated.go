@@ -1310,6 +1310,8 @@ func NewSignersAccessEntryExt(v int32, value interface{}) (result SignersAccessE
 //        AccountID accessGiverID; // source account id that gives access
 //        AccountID accessTakerID; // friend account id that takes access
 //
+//        int64 timeFrames;
+//
 //        // reserved for future use
 //        union switch (int v)
 //        {
@@ -1322,6 +1324,7 @@ func NewSignersAccessEntryExt(v int32, value interface{}) (result SignersAccessE
 type SignersAccessEntry struct {
 	AccessGiverId AccountId
 	AccessTakerId AccountId
+	TimeFrames    Int64
 	Ext           SignersAccessEntryExt
 }
 
@@ -1861,10 +1864,12 @@ type SetOptionsOp struct {
 //   struct GiveSignersAccessOp
 //    {
 //        AccountID friendID; //friend account id
+//        int64 timeFrames;
 //    };
 //
 type GiveSignersAccessOp struct {
-	FriendId AccountId
+	FriendId   AccountId
+	TimeFrames Int64
 }
 
 // SetSignersOp is an XDR Struct defines as:
@@ -3823,17 +3828,21 @@ func NewSetOptionsResult(code SetOptionsResultCode, value interface{}) (result S
 //        GIVE_SIGNERS_ACCESS_LOW_RESERVE = -1,
 //    	GIVE_SIGNERS_ACCESS_FRIEND_IS_SOURCE = -2,
 //        GIVE_SIGNERS_ACCESS_FRIEND_DOESNT_EXIST = -3,
-//        GIVE_SIGNERS_ACCESS_ACCESS_SRC_NOT_AUTHORISED = -4
+//        GIVE_SIGNERS_ACCESS_ACCESS_SRC_NOT_AUTHORISED = -4,
+//        GIVE_SIGNERS_ACCESS_SIGNERS_ACCESS_ALREADY_EXISTS = -5,
+//        GIVE_SIGNERS_ACCESS_TIME_FRAMES_EQUAL_OR_LESS_THEN_CURRENT_TIME = -6
 //    };
 //
 type GiveSignersAccessResultCode int32
 
 const (
-	GiveSignersAccessResultCodeGiveSignersAccessSuccess                GiveSignersAccessResultCode = 0
-	GiveSignersAccessResultCodeGiveSignersAccessLowReserve             GiveSignersAccessResultCode = -1
-	GiveSignersAccessResultCodeGiveSignersAccessFriendIsSource         GiveSignersAccessResultCode = -2
-	GiveSignersAccessResultCodeGiveSignersAccessFriendDoesntExist      GiveSignersAccessResultCode = -3
-	GiveSignersAccessResultCodeGiveSignersAccessAccessSrcNotAuthorised GiveSignersAccessResultCode = -4
+	GiveSignersAccessResultCodeGiveSignersAccessSuccess                              GiveSignersAccessResultCode = 0
+	GiveSignersAccessResultCodeGiveSignersAccessLowReserve                           GiveSignersAccessResultCode = -1
+	GiveSignersAccessResultCodeGiveSignersAccessFriendIsSource                       GiveSignersAccessResultCode = -2
+	GiveSignersAccessResultCodeGiveSignersAccessFriendDoesntExist                    GiveSignersAccessResultCode = -3
+	GiveSignersAccessResultCodeGiveSignersAccessAccessSrcNotAuthorised               GiveSignersAccessResultCode = -4
+	GiveSignersAccessResultCodeGiveSignersAccessSignersAccessAlreadyExists           GiveSignersAccessResultCode = -5
+	GiveSignersAccessResultCodeGiveSignersAccessTimeFramesEqualOrLessThenCurrentTime GiveSignersAccessResultCode = -6
 )
 
 var giveSignersAccessResultCodeMap = map[int32]string{
@@ -3842,6 +3851,8 @@ var giveSignersAccessResultCodeMap = map[int32]string{
 	-2: "GiveSignersAccessResultCodeGiveSignersAccessFriendIsSource",
 	-3: "GiveSignersAccessResultCodeGiveSignersAccessFriendDoesntExist",
 	-4: "GiveSignersAccessResultCodeGiveSignersAccessAccessSrcNotAuthorised",
+	-5: "GiveSignersAccessResultCodeGiveSignersAccessSignersAccessAlreadyExists",
+	-6: "GiveSignersAccessResultCodeGiveSignersAccessTimeFramesEqualOrLessThenCurrentTime",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -3910,19 +3921,21 @@ func NewGiveSignersAccessResult(code GiveSignersAccessResultCode, value interfac
 //        SET_SIGNERS_FRIEND_IS_SOURCE = -3,
 //        SET_SIGNERS_ACCESS_GIVER_DOESNT_EXIST = -4,
 //        SET_SIGNERS_ACCESS_ENTRY_DOESNT_EXIST = -5,
-//        SET_SIGNERS_BAD_SIGNER = -6
+//        SET_SIGNERS_BAD_SIGNER = -6,
+//        SET_SIGNERS_CURRENT_TIME_NOT_WITHIN_ACCESS_TIME_FRAMES = -7
 //    };
 //
 type SetSignersResultCode int32
 
 const (
-	SetSignersResultCodeSetSignersSuccess                SetSignersResultCode = 0
-	SetSignersResultCodeSetSignersLowReserve             SetSignersResultCode = -1
-	SetSignersResultCodeSetSignersInvalidAccess          SetSignersResultCode = -2
-	SetSignersResultCodeSetSignersFriendIsSource         SetSignersResultCode = -3
-	SetSignersResultCodeSetSignersAccessGiverDoesntExist SetSignersResultCode = -4
-	SetSignersResultCodeSetSignersAccessEntryDoesntExist SetSignersResultCode = -5
-	SetSignersResultCodeSetSignersBadSigner              SetSignersResultCode = -6
+	SetSignersResultCodeSetSignersSuccess                              SetSignersResultCode = 0
+	SetSignersResultCodeSetSignersLowReserve                           SetSignersResultCode = -1
+	SetSignersResultCodeSetSignersInvalidAccess                        SetSignersResultCode = -2
+	SetSignersResultCodeSetSignersFriendIsSource                       SetSignersResultCode = -3
+	SetSignersResultCodeSetSignersAccessGiverDoesntExist               SetSignersResultCode = -4
+	SetSignersResultCodeSetSignersAccessEntryDoesntExist               SetSignersResultCode = -5
+	SetSignersResultCodeSetSignersBadSigner                            SetSignersResultCode = -6
+	SetSignersResultCodeSetSignersCurrentTimeNotWithinAccessTimeFrames SetSignersResultCode = -7
 )
 
 var setSignersResultCodeMap = map[int32]string{
@@ -3933,6 +3946,7 @@ var setSignersResultCodeMap = map[int32]string{
 	-4: "SetSignersResultCodeSetSignersAccessGiverDoesntExist",
 	-5: "SetSignersResultCodeSetSignersAccessEntryDoesntExist",
 	-6: "SetSignersResultCodeSetSignersBadSigner",
+	-7: "SetSignersResultCodeSetSignersCurrentTimeNotWithinAccessTimeFrames",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -5782,11 +5796,13 @@ type LedgerKeyData struct {
 //        {
 //            AccountID accessGiverID;
 //            AccountID accessTakerID;
+//            int64 timeFrames;
 //        }
 //
 type LedgerKeySignersAccess struct {
 	AccessGiverId AccountId
 	AccessTakerId AccountId
+	TimeFrames    Int64
 }
 
 // LedgerKey is an XDR Union defines as:
@@ -5825,6 +5841,7 @@ type LedgerKeySignersAccess struct {
 //        {
 //            AccountID accessGiverID;
 //            AccountID accessTakerID;
+//            int64 timeFrames;
 //        } signersAccess;
 //    };
 //
